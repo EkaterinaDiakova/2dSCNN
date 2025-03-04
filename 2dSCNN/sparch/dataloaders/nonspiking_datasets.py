@@ -14,28 +14,6 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-
-def pad_sequence(batch):
-    # Make all tensor in a batch the same length by padding with zeros
-    batch = [item.t() for item in batch]
-    batch = torch.nn.utils.rnn.pad_sequence(batch, batch_first=True, padding_value=0.0)
-    return batch.permute(0, 2, 1)
-
-def tensor_to_events(batch, threshold=1, device=None):
-
-    events = torch.zeros(batch.shape)
-    levels = torch.round(batch[..., 0])
-    if device:
-        events = events.to(device)
-
-    for t in range(batch.shape[-1]):
-        events[..., t] = (batch[..., t] - levels > threshold).to(torch.int8) - (
-            batch[..., t] - levels < -threshold
-        ).to(torch.int8)
-        levels += events[..., t] * threshold
-    return events
-
-
 class Rusc(Dataset):
     def __init__(
         self,
