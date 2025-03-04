@@ -116,24 +116,27 @@ class SConv2d(nn.Module):
 
 
 class SAvgPool2d(nn.Module):
-    def __init__(self, kernel_size=(1, 2)):
+    def __init__(self, kernel_size=(2, 2)):
         super(SAvgPool2d, self).__init__()
         self.kernel_size = kernel_size
         self.thresh = nn.Parameter(torch.tensor([0.8]), requires_grad=True)
 
-
     def forward(self, x):
         batch_size, out_channels, num_windows, num_features, num_spikes = x.shape
-        x_reshaped = x.view(batch_size * num_spikes * out_channels, 1, num_windows, num_features)
+        
+        x_reshaped = x.permute(0, 1, 4, 2, 3).reshape(batch_size * out_channels * num_spikes, 1, num_windows, num_features)
+        
         pooled = nn.functional.avg_pool2d(x_reshaped, self.kernel_size)
-        pooled_shape = pooled.shape
-        pooled = pooled.view(batch_size, out_channels, pooled_shape[2], pooled_shape[3], num_spikes)
 
-        batch_size, out_channels, num_windows, num_features, num_spikes = pooled.shape
+        pooled_shape = pooled.shape
+        pooled = pooled.view(batch_size, out_channels, num_spikes, pooled_shape[2], pooled_shape[3])
+        
+        pooled = pooled.permute(0, 1, 3, 4, 2)
+        
         device = x.device
 
-        ut = torch.zeros(batch_size, out_channels, num_windows, num_features).to(device)
-        st = torch.zeros(batch_size, out_channels, num_windows, num_features).to(device)
+        ut = torch.zeros(batch_size, out_channels, pooled.shape[2], pooled.shape[3]).to(device)
+        st = torch.zeros(batch_size, out_channels, pooled.shape[2], pooled.shape[3]).to(device)
 
         s = []
 
@@ -143,11 +146,9 @@ class SAvgPool2d(nn.Module):
             st = SpikeFunctionBoxcar.apply(ut)
 
             s.append(st)
+
         return torch.stack(s, dim=4)
-
-        return pooled
-
-
+        
 class FlattenAndPermuteLayer(nn.Module):
     def __init__(self):
         super(FlattenAndPermuteLayer, self).__init__()
