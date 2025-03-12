@@ -57,10 +57,9 @@ class FeatureEncoder(nn.Module):
 
     def normalize_matrix(self, matrix):
         matrix = matrix.squeeze()
-        min_val = matrix.amin(dim=(1, 2), keepdim=True)
-        max_val = matrix.amax(dim=(1, 2), keepdim=True)
+        min_val = matrix.amin()
+        max_val = matrix.amax()
         normalized_matrix = self.time_steps * (matrix - min_val) / (max_val - min_val)
-
         return normalized_matrix.unsqueeze(1)
 
     def create_binary_sequences(self, normalized_matrix):
@@ -70,7 +69,7 @@ class FeatureEncoder(nn.Module):
         current_values = normalized_matrix.squeeze(1).clone()
 
         for t in range(self.time_steps):
-            mask = current_values > 0
+            mask = current_values >= 0.5
             three_d_matrix[:, :, :, t] = mask.float()
             current_values[mask] -= 1
 
@@ -81,7 +80,8 @@ class FeatureEncoder(nn.Module):
 
     def forward(self, feature_matrix):
       normalized_matrix = self.normalize_matrix(feature_matrix)
-      return self.create_binary_sequences(normalized_matrix).to(feature_matrix.device)
+      #return self.create_binary_sequences(normalized_matrix).to(feature_matrix.device)
+      return self.create_binary_sequences(feature_matrix).to(feature_matrix.device)
 
 class SConv2d(nn.Module):
     def __init__(self, in_channels=1, out_channels=8, kernel_size=(6, 6), padding='same', bias=False):
@@ -99,8 +99,8 @@ class SConv2d(nn.Module):
         batch_size, _, num_windows, num_features, num_spikes = x.shape
         print(x.shape)
         device = x.device
-
-        ut = torch.zeros(batch_size, self.out_channels, num_windows, num_features).to(device)
+        ut = (torch.ones(batch_size, self.out_channels, num_windows, num_features)).to(device) * self.thresh / 2
+        #ut = torch.zeros(batch_size, self.out_channels, num_windows, num_features).to(device)
         st = torch.zeros(batch_size, self.out_channels, num_windows, num_features).to(device)
 
         s = []
@@ -109,7 +109,7 @@ class SConv2d(nn.Module):
             Wx = self.conv(x[:, :, :, :, t])
             ut = ut - st * self.thresh + Wx
 
-            st = SpikeFunctionBoxcar.apply(ut)
+            st = SpikeFunctionBoxcar.apply(ut-self.thresh)
 
             s.append(st)
         return torch.stack(s, dim=4)
@@ -134,8 +134,8 @@ class SAvgPool2d(nn.Module):
         pooled = pooled.permute(0, 1, 3, 4, 2)
         
         device = x.device
-
-        ut = torch.zeros(batch_size, out_channels, pooled.shape[2], pooled.shape[3]).to(device)
+        ut = (torch.ones(batch_size, out_channels, pooled.shape[2], pooled.shape[3])).to(device) * self.thresh / 2
+        #ut = torch.zeros(batch_size, out_channels, pooled.shape[2], pooled.shape[3]).to(device)
         st = torch.zeros(batch_size, out_channels, pooled.shape[2], pooled.shape[3]).to(device)
 
         s = []
@@ -143,12 +143,12 @@ class SAvgPool2d(nn.Module):
         for t in range(num_spikes):
             ut = ut - st * self.thresh + pooled[:, :, :, :, t]
 
-            st = SpikeFunctionBoxcar.apply(ut)
+            st = SpikeFunctionBoxcar.apply(ut-self.thresh)
 
             s.append(st)
 
         return torch.stack(s, dim=4)
-        
+
 class FlattenAndPermuteLayer(nn.Module):
     def __init__(self):
         super(FlattenAndPermuteLayer, self).__init__()
