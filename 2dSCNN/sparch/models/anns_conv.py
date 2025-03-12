@@ -24,7 +24,7 @@ class CNN(nn.Module):
         self.n_classes = n_classes
         self.is_snn = False
 
-        self.ann.append(ClipFloor_enc())
+        self.ann.append(ClipFloor(th=8.0))
 
         self.ann.append(nn.Conv2d(in_channels=1, out_channels=8, kernel_size=(6, 6), padding='same', bias=False))
         self.ann.append(ClipFloor())
@@ -62,10 +62,10 @@ class CNN(nn.Module):
 class ClipFloor(nn.Module):
 #ClipFloor activation function from https://arxiv.org/pdf/2303.04347
 
-    def __init__(self):
+    def __init__(self, th = 0.8):
 
         super().__init__()
-        self.thresh = nn.Parameter(torch.tensor([0.8]), requires_grad=True)
+        self.thresh = nn.Parameter(torch.tensor([th]), requires_grad=True)
         self.L = 8
         self.clip = GradFloor.apply
 
@@ -74,6 +74,7 @@ class ClipFloor(nn.Module):
         x = x / self.thresh
         x = torch.clamp(x, 0, 1)
         x = self.clip(x * self.L + 0.5) / self.L
+        #x = self.clip(x * self.L) / self.L
         #x = x * self.thresh#
         return x
 
